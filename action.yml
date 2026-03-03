@@ -1,0 +1,53 @@
+name: 'release-restore-zip'
+description: 'Download & restore ZIP, optional unzip'
+inputs:
+  release_tag:
+    required: true
+  zip_name:
+    required: true
+  unzip:
+    required: false
+    default: false
+  output_dir:
+    required: false
+    default: ./
+  github_token:
+    required: true
+outputs:
+  status:
+    description: "1=success, 0=failure"
+    value: ${{ steps.final-status.outputs.status }}
+runs:
+  using: composite
+  steps:
+    - id: check-asset
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ inputs.zip_name }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-")) | .' | wc -l)
+        if [ $has_asset -eq 0 ]; then
+          echo "::error::Asset not found: ${{ inputs.zip_name }}"
+          exit 1
+        fi
+
+    - id: download
+      shell: bash
+      run: gh release download ${{ inputs.release_tag }} -p "${{ inputs.zip_name }}*"
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+
+    - id: merge
+      shell: bash
+      run: |
+        if ls ${{ inputs.zip_name }}.part-* 1>/dev/null 2>&1; then
+          cat ${{ inputs.zip_name }}.part-* > ${{ inputs.zip_name }}
+        fi
+
+    - if: ${{ inputs.unzip == 'true' }}
+      shell: bash
+      run: unzip -q ${{ inputs.zip_name }} -d ${{ inputs.output_dir }}
+
+    - id: final-status
+      shell: bash
+      run: echo "status=1" >> $GITHUB_OUTPUT
