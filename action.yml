@@ -30,6 +30,7 @@ runs:
         has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ inputs.zip_name }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-"))' | wc -l)
         if [ $has_asset -eq 0 ]; then
           echo "::error::Asset not found: ${{ inputs.zip_name }}"
+          exit 1
         fi
       shell: bash
       env:
