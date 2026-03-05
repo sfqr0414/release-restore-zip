@@ -27,10 +27,13 @@ runs:
 
     - name: Check asset exists
       run: |
+        set +e
         has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ inputs.zip_name }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-"))' | wc -l)
         if [ $has_asset -eq 0 ]; then
           echo "::error::Asset not found: ${{ inputs.zip_name }}"
+          exit 1
         fi
+        set -e
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
