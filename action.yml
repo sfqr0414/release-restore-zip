@@ -59,14 +59,14 @@ runs:
       shell: bash
 
     - name: Set success status
-      id: status
+      id: success-step
       if: ${{ success() }}
       run: |
         echo "status=1" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Set failure status
-      id: status
+      id: fail-step
       if: ${{ failure() }}
       run: |
         echo "status=0" >> $GITHUB_OUTPUT
