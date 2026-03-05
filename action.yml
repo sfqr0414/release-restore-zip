@@ -15,7 +15,7 @@ inputs:
 outputs:
   status:
     description: "1=success, 0=failure"
-    value: ${{ steps.success-step.outputs.status || steps.fail-step.outputs.status }}
+    value: ${{ steps.status.outputs.status }}
 
 runs:
   using: composite
@@ -30,7 +30,6 @@ runs:
         has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ inputs.zip_name }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-"))' | wc -l)
         if [ $has_asset -eq 0 ]; then
           echo "::error::Asset not found: ${{ inputs.zip_name }}"
-          false
         fi
       shell: bash
       env:
@@ -60,16 +59,13 @@ runs:
         unzip -q "${{ inputs.output_dir }}/${{ inputs.zip_name }}" -d "${{ inputs.output_dir }}"
       shell: bash
 
-    - name: Set success status
-      id: success-step
-      if: ${{ success() }}
+    - name: Set status
+      id: status
+      if: ${{ always() }}
       run: |
-        echo "status=1" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Set failure status
-      id: fail-step
-      if: ${{ failure() }}
-      run: |
-        echo "status=0" >> $GITHUB_OUTPUT
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "status=1" >> $GITHUB_OUTPUT
+        else
+          echo "status=0" >> $GITHUB_OUTPUT
+        fi
       shell: bash
