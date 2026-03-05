@@ -15,33 +15,21 @@ inputs:
 outputs:
   status:
     description: "1=success, 0=failure"
-    value: ${{ steps.parse-path.outputs.status }}
+    value: ${{ steps.status.outputs.status }}
+
 runs:
   using: composite
   steps:
-    - name: Parse path and create dir
-      id: parse-path
+    - name: Create output directory
       run: |
-        ZIP_FULL="${{ inputs.zip_name }}"
-        ZIP_FILE=$(basename "$ZIP_FULL" 2>/dev/null)
-        ZIP_DIR=$(dirname "$ZIP_FULL" 2>/dev/null)
-        if [ -z "$ZIP_FILE" ] || [ "$ZIP_FILE" = "." ] || [ "$ZIP_FILE" = "/" ]; then
-          echo "status=0" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        mkdir -p "$ZIP_DIR"
-        echo "status=1" >> $GITHUB_OUTPUT
-        echo "zip_file=$ZIP_FILE" >> $GITHUB_OUTPUT
-        echo "zip_dir=$ZIP_DIR" >> $GITHUB_OUTPUT
-        echo "zip_full=$ZIP_FULL" >> $GITHUB_OUTPUT
+        mkdir -p "${{ inputs.output_dir }}"
       shell: bash
 
     - name: Check asset exists
-      if: ${{ steps.parse-path.outputs.status == 1 }}
       run: |
-        has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ steps.parse-path.outputs.zip_file }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-"))' | wc -l)
+        has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ inputs.zip_name }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-"))' | wc -l)
         if [ $has_asset -eq 0 ]; then
-          echo "::error::Asset not found: ${{ steps.parse-path.outputs.zip_file }}"
+          echo "::error::Asset not found: ${{ inputs.zip_name }}"
           exit 1
         fi
       shell: bash
@@ -49,25 +37,37 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
 
     - name: Download assets
-      if: ${{ steps.parse-path.outputs.status == 1 }}
       run: |
-        gh release download ${{ inputs.release_tag }} -p "${{ steps.parse-path.outputs.zip_file }}*" --clobber -D "${{ steps.parse-path.outputs.zip_dir }}"
+        gh release download ${{ inputs.release_tag }} -p "${{ inputs.zip_name }}*" --clobber -D "${{ inputs.output_dir }}"
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
 
     - name: Merge split parts if exist
-      if: ${{ steps.parse-path.outputs.status == 1 }}
       run: |
-        cd "${{ steps.parse-path.outputs.zip_dir }}"
-        if ls ${{ steps.parse-path.outputs.zip_file }}.part-* 1>/dev/null 2>&1; then
-          cat ${{ steps.parse-path.outputs.zip_file }}.part-* > ${{ steps.parse-path.outputs.zip_file }}
-          rm -f ${{ steps.parse-path.outputs.zip_file }}.part-*
+        zip_path="${{ inputs.output_dir }}/${{ inputs.zip_name }}"
+        if ls "$zip_path".part-* 1>/dev/null 2>&1; then
+          cat "$zip_path".part-* > "$zip_path"
+          rm -f "$zip_path".part-*
         fi
       shell: bash
 
     - name: Unzip if enabled
-      if: ${{ steps.parse-path.outputs.status == 1 && inputs.unzip == 'true' }}
+      if: ${{ inputs.unzip == 'true' }}
       run: |
-        unzip -q "${{ steps.parse-path.outputs.zip_full }}" -d ${{ inputs.output_dir }}
+        unzip -q "${{ inputs.output_dir }}/${{ inputs.zip_name }}" -d "${{ inputs.output_dir }}"
+      shell: bash
+
+    - name: Set success status
+      id: status
+      if: ${{ success() }}
+      run: |
+        echo "status=1" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Set failure status
+      id: status
+      if: ${{ failure() }}
+      run: |
+        echo "status=0" >> $GITHUB_OUTPUT
       shell: bash
