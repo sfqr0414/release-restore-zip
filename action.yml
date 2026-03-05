@@ -15,7 +15,7 @@ inputs:
 outputs:
   status:
     description: "1=success, 0=failure"
-    value: ${{ steps.status.outputs.status }}
+    value: ${{ steps.success-step.outputs.status || steps.fail-step.outputs.status }}
 
 runs:
   using: composite
@@ -30,13 +30,14 @@ runs:
         has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ inputs.zip_name }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-"))' | wc -l)
         if [ $has_asset -eq 0 ]; then
           echo "::error::Asset not found: ${{ inputs.zip_name }}"
-          exit 1
+          false
         fi
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
 
     - name: Download assets
+      if: ${{ success() }}
       run: |
         gh release download ${{ inputs.release_tag }} -p "${{ inputs.zip_name }}*" --clobber -D "${{ inputs.output_dir }}"
       shell: bash
@@ -44,6 +45,7 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
 
     - name: Merge split parts if exist
+      if: ${{ success() }}
       run: |
         zip_path="${{ inputs.output_dir }}/${{ inputs.zip_name }}"
         if ls "$zip_path".part-* 1>/dev/null 2>&1; then
@@ -53,7 +55,7 @@ runs:
       shell: bash
 
     - name: Unzip if enabled
-      if: ${{ inputs.unzip == 'true' }}
+      if: ${{ success() && inputs.unzip == 'true' }}
       run: |
         unzip -q "${{ inputs.output_dir }}/${{ inputs.zip_name }}" -d "${{ inputs.output_dir }}"
       shell: bash
