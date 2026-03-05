@@ -26,6 +26,7 @@ runs:
       shell: bash
 
     - name: Check asset exists
+      id: check_asset
       run: |
         has_asset=$(gh release view ${{ inputs.release_tag }} --json assets | jq -r --arg name "${{ inputs.zip_name }}" '.assets[] | .name | select(. == $name or startswith($name + ".part-"))' | wc -l)
         if [ $has_asset -eq 0 ]; then
@@ -37,6 +38,7 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
 
     - name: Download assets
+      id: download
       if: ${{ success() }}
       run: |
         gh release download ${{ inputs.release_tag }} -p "${{ inputs.zip_name }}*" --clobber -D "${{ inputs.output_dir }}"
@@ -45,6 +47,7 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
 
     - name: Merge split parts if exist
+      id: merge
       if: ${{ success() }}
       run: |
         zip_path="${{ inputs.output_dir }}/${{ inputs.zip_name }}"
@@ -55,6 +58,7 @@ runs:
       shell: bash
 
     - name: Unzip if enabled
+      id: unzip
       if: ${{ success() && inputs.unzip == 'true' }}
       run: |
         unzip -q "${{ inputs.output_dir }}/${{ inputs.zip_name }}" -d "${{ inputs.output_dir }}"
@@ -64,9 +68,9 @@ runs:
       id: status
       if: ${{ always() }}
       run: |
-        if [ "${{ job.status }}" = "success" ]; then
-          echo "status=1" >> $GITHUB_OUTPUT
-        else
+        if [ "${{ contains(steps.*.outcome, 'failure') }}" = "true" ]; then
           echo "status=0" >> $GITHUB_OUTPUT
+        else
+          echo "status=1" >> $GITHUB_OUTPUT
         fi
       shell: bash
